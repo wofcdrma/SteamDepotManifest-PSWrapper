@@ -32,7 +32,7 @@ Import-Module -Name .\SteamDepotManifest-PSWrapper.psm1
 ### Get-SteamManifestFile
 Syntax:
 ```
-Get-SteamManifestFile [-DepotID] <string> [[-ManifestID] <string>] [[-MRCode] <string>] [-DoNotAppendSeenDate] [<CommonParameters>]
+Get-SteamManifestFile -DepotID <string> [[-ManifestID] <string>] [[-MRCode] <string>] [-DoNotAppendSeenDate] [<CommonParameters>]
 ```
 **Note:** This function will only save the SeenDate in the manifest filename if it parses it from the SteamDB manifest table.
 <br>
