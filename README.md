@@ -38,7 +38,7 @@ Get-SteamManifestFile [-DepotID] <string> [[-ManifestID] <string>] [[-MRCode] <s
 <br>
 <br>
 
-You can find DepotIDs and ManifestIDs on [SteamDB](https://steamdb.info/), or by using the Steam Console, if you are familiar.
+You can find Depot IDs and Manifest IDs on [SteamDB](https://steamdb.info/), or the latest Manifest ID of a depot by using the Steam Console, if you are familiar.
 <br>
 <br>
 
