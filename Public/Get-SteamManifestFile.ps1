@@ -123,40 +123,57 @@ Function Get-SteamManifestFile {
 
         $ManifestReqList | ForEach-Object {
 
+            $tempDir          = $null
             $manifestReq      = $null
-            $manifestFile     = $null
             $manifestSavePath = $null
 
             If ($($_.DepotID) -and $($_.ManifestID) -and $($_.MRCode)) {
+            
+                $tempDir = "$($env:TEMP)\$(New-Guid)"
+                New-Item -ItemType Directory -Path $tempDir | Out-Null
+
+                If ($_.SeenDate -and $DoNotAppendSeenDate -eq $false) {
+                    $manifestSavePath = "$env:SteamDepotPath\$($_.DepotID)\$($_.DepotID)_$($_.SeenDate)_$($_.ManifestID).manifest"
+                } else {
+                    $manifestSavePath = "$env:SteamDepotPath\$($_.DepotID)\$($_.DepotID)_$($_.ManifestID).manifest"
+                }
                 
-                Write-Host "Requesting manifest file from Steam CDN." -ForegroundColor DarkGray # debug
-                $manifestReq = Invoke-WebRequest -Method GET -Headers $manifestReqHeaders -Uri "https://cache11-ord1.steamcontent.com/depot/$($_.DepotID)/manifest/$($_.ManifestID)/5/$($_.MRCode)" -HttpVersion 1.1
-                Write-Host "HTTP request complete. Status: $($manifestReq.StatusCode)" -ForegroundColor DarkGray # debug
+                try {
+                    # this doesn't work -- I need to decompress the file that is downloaded. probably make it output to a temp file, uncompress, then set-content to manifestsavepath
+                    Write-Host "Requesting manifest file from Steam CDN." -ForegroundColor DarkGray # debug
+                    $manifestReq = Invoke-WebRequest -Method GET -Headers $manifestReqHeaders -Uri "https://cache11-ord1.steamcontent.com/depot/$($_.DepotID)/manifest/$($_.ManifestID)/5/$($_.MRCode)" -HttpVersion 1.1 -OutFile "$($tempDir)\raw" -PassThru
+                    Write-Host "HTTP request complete. Status: $($manifestReq.StatusCode)" -ForegroundColor DarkGray # debug
+                } catch {
+                    Write-Host "Error saving the manifest file: $_" -ForegroundColor Red
+                    Pause
+                }
+                
+
 
                 If ($manifestReq.StatusCode -eq '200') {
-                
-                    $manifestFile = $manifestReq.Content
-                    #### $manifestFile | Out-File -Path "$SteamDepotPath\$DepotID\$ManifestID.manifest" #### 
-                    #### not using out-file because it seems to be a lot slower than set-content cmdlet ####
-                    
-                    If ($_.SeenDate -and $DoNotAppendSeenDate -eq $false) {
-                        $manifestSavePath = "$env:SteamDepotPath\$($_.DepotID)\$($_.DepotID)_$($_.SeenDate)_$($_.ManifestID).manifest"
+
+                    Expand-Archive -LiteralPath "$($tempDir)\raw" -DestinationPath $($tempDir)
+
+                    $extractedFile = (Get-ChildItem -LiteralPath $($tempDir) -Exclude "raw").FullName
+
+                    If ($extractedFile.Count -eq '1') {
+
+                        try {
+                            Move-Item -Path $extractedFile -Destination $manifestSavePath -ErrorAction Stop
+                            Write-Host "Saved manifest file to $manifestSavePath.`n`n" -ForegroundColor Green
+                            $results += [PSCustomObject]@{
+                                DepotID          = $($_.DepotID)
+                                ManifestID       = $($_.ManifestID)
+                                ManifestSavePath = $($manifestSavePath)
+                            }
+                        } catch {
+                            Write-Host "Error saving the temporarily extracted manifest file. Error: $_." -ForegroundColor Yellow
+                            Pause
+                        }
+
                     } else {
-                        $manifestSavePath = "$env:SteamDepotPath\$($_.DepotID)\$($_.DepotID)_$($_.ManifestID).manifest"
-                    }
-                    
-                    try {
-                        Set-Content -Path "$manifestSavePath" -Value $manifestFile -ErrorAction Stop
-                        Write-Host "Saved manifest file to $manifestSavePath.`n`n" -ForegroundColor Green
-                    } catch {
-                        Write-Host "Error saving the manifest file: $_" -ForegroundColor Red
+                        Write-Host "Manifest archive from Steam CDN contained multiple files. Expected 1 file." -ForegroundColor Yellow
                         Pause
-                    }
-                    
-                    $results += [PSCustomObject]@{
-                        DepotID          = $($_.DepotID)
-                        ManifestID       = $($_.ManifestID)
-                        ManifestSavePath = $($manifestSavePath)
                     }
 
                 } else {
@@ -164,9 +181,12 @@ Function Get-SteamManifestFile {
                     Write-Host "DepotID - $($_.DepotID)"
                     Write-Host "ManifestID - $($_.ManifestID)"
                     Write-Host "MRCode - $($_.MRCode)"
-                    # Write-Host "DepotDecryptionKey - $DepotDecryptionKey" --- I'll likely seperate the DDK stuff from this function. Not sure if I will ever link these two together.
+                    Pause
+                    # Write-Host "DepotDecryptionKey - $DepotDecryptionKey" --- I'll likely seperate the DDK stuff from this function. Not sure if I will ever link these two together in one function.
                     # In my mind, a proper use would be one script using this function, a seperate get-ddk function, then making a DDM command to combine the two results.
                 }
+
+                Remove-Item -Path $tempDir -Recurse -Force
 
             } else {
                 throw "DepotID / ManifestID / MRCode in the ManifestReqList object not present. Can't make the request to Steam CDN to pull the manifest file."
